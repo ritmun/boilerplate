@@ -2,23 +2,19 @@ reviewers:
 - jharrington22
 - dustman9000
 - 2uasimojo
-- arjunrn
 - bdematte
-- mjlshen
 - xiaoyu74
 - mmazur
+- jbpratt
 approvers:
 - jharrington22
 - dustman9000
 - 2uasimojo
-- arjunrn
 - bdematte
-- mjlshen
 - mmazur
+- srep-team-leads
 maintainers:
 - jharrington22
 - dustman9000
 - 2uasimojo
-- arjunrn
 - bdematte
-- mjlshen

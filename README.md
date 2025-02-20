@@ -369,18 +369,33 @@ See existing test cases for examples.
 If you make a change to the build image produced by boilerplate -- i.e.
 by changing anything in [config/](config/) -- you must:
 
-1. Publish a new tag. This will be picked up by AppSRE and used to publish a new tagged image for consumption via
-`LATEST_IMAGE_TAG` in conventions. The tag must be named `image-v{X}.{Y}.{Z}`, using [semver](https://semver.org/)
+1. Publish a new tag. The tag must be named `image-v{X}.{Y}.{Z}`, using [semver](https://semver.org/)
 principles when deciding what `{X}.{Y}.{Z}` should be. See https://github.com/openshift/boilerplate/pull/180
 for an example.
 
     ```shell
+    # Make code changes and create tag
     git tag image-v1.2.3
-    git push origin --tags
-    # Create PR here
-    # Typically only team leads can push tags to upstream, so they will need to continue by
-    # checking out your fork and then running
-    git push upstream --tags
+
+    # Push tag to origin
+    git push origin image-v1.2.3
+
+    # Create PR and notify Team Lead (or member with write permissions). They will need to do the following:
+
+    # create remote from user's fork
+    git remote add someuser git@github.com:someuser/boilerplate.git
+
+    # git fetch
+    git fetch --all --prune
+
+    # create branch from user's fork and branch
+    git checkout -b someuser-branch-name someuser/branch-name
+
+    # create tag
+    git tag -f image-v1.2.3
+
+    # push tag to upstream
+    git push upstream -f image-v1.2.3
     ```
 
     >**NOTE**: You must do the `upstream` push *after* creating your PR. Otherwise, the tagged commit will not exist
@@ -393,8 +408,7 @@ upstream.
 The backing image is built in prow with every commit, even when nothing about it has changed.
 To make this faster, we periodically ratchet the base image (the `FROM` in the [Dockerfile](config/Dockerfile))
 to point to the previously-released image, and clear out the [build script](config/build.sh) to start from that point.
-However, in app-sre we build from scratch (exactly once per `image-v*` tag!), via a [separate Dockerfile](config/Dockerfile.appsre).
-Thus, there is a (very small) chance that these builds will behave differently.
+However, in Konflux we build from scratch (exactly once per `image-v*` tag!).
 
 When the underlying base image changes significantly, the `FROM` directive in [config/Dockerfile](config/Dockerfile)
 may be temporarily changed to the new upstream image. However, as soon as it is stable, a new commit should be made
@@ -404,9 +418,9 @@ ourselves and consumers.
 For example, let's say that the current base image has Go 1.18, but we need Go 1.19, and
 it's not available in boilerplate:image-v2.Y.Z
 
-1. Update config/Dockerfile and config/Dockerfile.appsre
+1. Update config/Dockerfile
     ```
-    FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.19-openshift-4.12
+    FROM registry.ci.openshift.org/openshift/release:rhel-8-release-golang-1.22-openshift-4.17
     ```
 2. Then, update the rest of boilerplate accordingly, push a new tag, and mirror the image into openshift/release
 to create boilerplate:image-v3.0.0
@@ -420,3 +434,32 @@ We only build and publish a new build image on commits tagged with `image-v*`, w
 If the base image (`golang-*`) is updated for any reason, including security fixes, the boilerplate build image will only pick up those changes the next time we produce a new version.
 To pick up such changes right away, simply produce a new version (identical to the previous in terms of what boilerplate configures) according to the instructions [above](#build-images).
 Of course, consumers will need to update to/past the tagged commit in order to use the new image.
+
+#### Creating a Konflux release
+Konflux auto-releasing is disabled requiring manual releasing of each git tag
+specifically. Once a new git tag is pushed, find the resulting snapshot that
+contains the newly built artifact:
+
+```
+oc get snapshots --sort-by=.metadata.creationTimestamp
+```
+
+The `ReleasePlanAdmission` resource in `konflux-release-data` should be updated
+with the new image tag. A `Release` CR can then be created based on the
+snapshot and existing `ReleasePlan` which will trigger a managed release
+pipeline, publishing the new image:
+
+```yaml
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Release
+metadata:
+ name: <git tag version>
+spec:
+ releasePlan: boilerplate-releaseplan
+ snapshot: <snapshot name>
+```
+
+**NOTE**: Once a new release is created, ensure to update the `ImageStream`
+references in `openshift/release`.
+
+For any issues, reach out to the #hcm-cicd channel on Slack.
